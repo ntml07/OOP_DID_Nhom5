@@ -1,0 +1,3 @@
+C:/Users/Dell/source/repos/OOP_DID_Nhom5/out/build/x64-Debug/CMakeFiles/VerifiableCredential.dir
+C:/Users/Dell/source/repos/OOP_DID_Nhom5/out/build/x64-Debug/CMakeFiles/edit_cache.dir
+C:/Users/Dell/source/repos/OOP_DID_Nhom5/out/build/x64-Debug/CMakeFiles/rebuild_cache.dir
