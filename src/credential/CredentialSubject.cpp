@@ -1,4 +1,5 @@
 #include "credential/CredentialSubject.h"
+#include <sstream>
 
 // TODO: Implement methods declared in CredentialSubject.h
 
