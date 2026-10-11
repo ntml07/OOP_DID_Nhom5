@@ -23,13 +23,6 @@ Holder::getCredentials() const
 	return credentials;
 }
 //Tìm VC theo ID
-for (const auto& credential : credentials)
-{
-	if (credential.getId() == credentialId)
-	{
-		return &credential;
-	}
-}
 const VerifiableCredential*
 Holder::findCredential(const std::string& credentialId) const
 {
