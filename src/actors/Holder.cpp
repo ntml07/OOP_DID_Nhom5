@@ -10,13 +10,14 @@ const DID& Holder::getDID() const
 {
 	return did; 
 }
-//Holder nhận VC
+// Holder nhận và lưu VC vào danh sách, không sửa chữ ký
 void Holder::receiveCredential(
 	const VerifiableCredential& credential)
 {
 	credentials.push_back(credential);
 }
-//Lưu VC vào danh sách
+
+// Trả danh sách VC đã lưu
 const std::vector<VerifiableCredential>&
 Holder::getCredentials() const
 {

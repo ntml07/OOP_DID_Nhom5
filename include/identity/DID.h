@@ -10,4 +10,5 @@ public:
     std::string getValue() const;
     bool isValid() const;
     std::string toString() const;
+    bool operator==(const DID& other) const;
 };
