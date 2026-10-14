@@ -21,3 +21,14 @@ add_executable(VerifiableCredential
 )
 
 target_include_directories(VerifiableCredential PRIVATE include)
+
+add_executable(test_credential
+    tests/test_credential.cpp
+    src/identity/DID.cpp
+    src/credential/CredentialSubject.cpp
+    src/credential/CredentialStatus.cpp
+    src/credential/VerifiableCredential.cpp
+    src/crypto/DigitalSignature.cpp
+)
+
+target_include_directories(test_credential PRIVATE include)
