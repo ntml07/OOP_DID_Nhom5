@@ -1,5 +1,4 @@
 #include "crypto/RSA.h"
-
 RSA::RSA() {
     publicKey = "";
     privateKey = "";

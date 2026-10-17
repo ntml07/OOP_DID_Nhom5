@@ -1,9 +1,14 @@
-#include <bits/stdc++.h>
+#include <iostream>
+#include <cassert>
+#include <string>
+
 #include "crypto/DigitalSignature.h"
 #include "crypto/RSA.h"
 
-void testDigitalSignature() {
-    std::cout << "[TEST] Running DigitalSignature tests...\n";
+void testDigitalSignature()
+{
+    // Main block: DigitalSignature empty vs filled data object
+    std::cout << "Test 1: DigitalSignature\n";
 
     DigitalSignature emptySig;
     assert(emptySig.empty() == true);
@@ -14,37 +19,40 @@ void testDigitalSignature() {
     assert(sig.getValue() == "sig_value_test");
     assert(sig.empty() == false);
 
-    std::cout << "[PASS] DigitalSignature tests passed!\n";
+    std::cout << "DigitalSignature: PASSED\n\n";
 }
 
-void testRSA() {
-    std::cout << "[TEST] Running RSA tests...\n";
+void testRSA()
+{
+    // Main block: RSA sign then verify valid / tampered / wrong key
+    std::cout << "Test 2: RSA sign + verify\n";
 
     RSA rsa;
     rsa.generateKeyPair();
     std::string pubKey = rsa.getPublicKey();
 
     std::string data = "Decentralized Identity Data";
-    std::string keyId = "key-rsa-xyz";
+    std::string keyId = "did:example:issuer001#key-1";
 
     DigitalSignature sig = rsa.sign(data, keyId);
-
-    assert(rsa.verify(data, sig, pubKey) == true);
-
-    std::string tamperedData = "Tampered Data";
-    assert(rsa.verify(tamperedData, sig, pubKey) == false);
-
-    std::string wrongPubKey = "INVALID_PUBLIC_KEY";
-    assert(rsa.verify(data, sig, wrongPubKey) == false);
-
+    assert(sig.empty() == false);
+    assert(sig.getKeyId() == keyId);
     assert(rsa.getAlgorithmName() == "SHA256withRSA");
 
-    std::cout << "[PASS] RSA tests passed!\n";
+    assert(rsa.verify(data, sig, pubKey) == true);
+    assert(rsa.verify("Tampered Data", sig, pubKey) == false);
+    assert(rsa.verify(data, sig, "INVALID_PUBLIC_KEY") == false);
+
+    std::cout << "RSA: PASSED\n\n";
 }
 
-int main() {
+int main()
+{
+    std::cout << "===== TEST CRYPTO MODULE =====\n\n";
+
     testDigitalSignature();
     testRSA();
-    std::cout << "[ALL TESTS PASSED SUCCESSFULLY!]\n";
+
+    std::cout << "===== ALL CRYPTO TESTS PASSED =====\n";
     return 0;
 }

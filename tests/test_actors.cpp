@@ -1,54 +1,56 @@
-#include "actors/Issuer.h"
+#include <iostream>
+#include <cassert>
+
 #include "actors/Holder.h"
+#include "actors/Issuer.h"
 #include "credential/CredentialSubject.h"
 #include "credential/VerifiableCredential.h"
-#include "identity/DID.h"
 #include "crypto/RSA.h"
-#include <cassert>
-#include <iostream>
+#include "identity/DID.h"
 
 void testHolder()
 {
-    DID holderDID("did:example:holder");
-    DID subjectDID("did:example:subject");
+    // Main block: Holder receive / find / miss credential
+    std::cout << "Test 1: Holder\n";
 
-    CredentialSubject subject(subjectDID);
-    subject.addClaim("name", "Test User");
+    DID holderDID("did:example:holder001");
+    CredentialSubject subject(holderDID);
+    subject.addClaim("name", "Alice");
 
     VerifiableCredential vc(
-        "vc001",
-        "did:example:issuer",
+        "vc:001",
+        "did:example:issuer001",
         subject,
-        "2026-10-13",
-        "UniversityCredential"
-    );
+        "2024-01-01");
 
     Holder holder(holderDID);
     holder.receiveCredential(vc);
 
+    assert(holder.getDID().getValue() == "did:example:holder001");
     assert(holder.getCredentials().size() == 1);
 
-    const VerifiableCredential* found =
-        holder.findCredential("vc001");
-
+    const VerifiableCredential* found = holder.findCredential("vc:001");
     assert(found != nullptr);
-    assert(found->getId() == "vc001");
+    assert(found->getId() == "vc:001");
+    assert(found->getSubject().getClaim("name") == "Alice");
 
-    const VerifiableCredential* notFound =
-        holder.findCredential("vc999");
-
+    const VerifiableCredential* notFound = holder.findCredential("vc:999");
     assert(notFound == nullptr);
 
-    std::cout << "Holder tests passed!" << std::endl;
+    std::cout << "Holder: PASSED\n\n";
 }
 
 void testIssuer()
 {
-    DID issuerDID("did:example:issuer");
-    DID subjectDID("did:example:subject");
+    // Main block: Issuer issueCredential and attach signature
+    std::cout << "Test 2: Issuer\n";
 
-    CredentialSubject subject(subjectDID);
-    subject.addClaim("name", "Test User");
+    DID issuerDID("did:example:issuer001");
+    DID holderDID("did:example:holder001");
+
+    CredentialSubject subject(holderDID);
+    subject.addClaim("name", "Alice");
+    subject.addClaim("membership", "active");
 
     RSA crypto;
     crypto.generateKeyPair();
@@ -56,26 +58,32 @@ void testIssuer()
     Issuer issuer(
         issuerDID,
         crypto,
-        "did:example:issuer#key-1"
-    );
+        "did:example:issuer001#key-1");
 
     VerifiableCredential vc = issuer.issueCredential(
-        "vc002",
+        "vc:002",
         subject,
-        "2026-10-14"
-    );
+        "2024-01-01");
 
-    assert(vc.getId() == "vc002");
+    assert(issuer.getDID().getValue() == "did:example:issuer001");
+    assert(vc.getId() == "vc:002");
     assert(vc.getIssuerDID() == issuerDID.toString());
+    assert(vc.getSubject().getClaim("name") == "Alice");
     assert(vc.hasSignature() == true);
+    assert(vc.getSignature().getKeyId() == "did:example:issuer001#key-1");
+    assert(vc.getStatus().isValid() == true);
 
-    std::cout << "Issuer tests passed!" << std::endl;
+    std::cout << "Issuer: PASSED\n\n";
 }
 
 int main()
 {
+    std::cout << "===== TEST ACTORS MODULE =====\n\n";
+
     testHolder();
     testIssuer();
+
+    // Verifier tests: add after Verifier.cpp is implemented
+    std::cout << "===== ALL ACTORS TESTS PASSED =====\n";
     return 0;
 }
-

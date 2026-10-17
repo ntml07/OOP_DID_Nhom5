@@ -1,63 +1,81 @@
-#include "zkp/SchnorrZKP.h"
-
 #include <iostream>
+#include <cassert>
 #include <string>
 
-namespace {
-int failures = 0;
+#include "zkp/SchnorrZKP.h"
 
-void check(bool condition, const std::string& name)
+void testValidProof()
 {
-    std::cout << (condition ? "[PASS] " : "[FAIL] ") << name << '\n';
-    if (!condition) ++failures;
-}
-}
+    std::cout << "Test 1: secret -> publicValue -> proof -> verify\n";
 
-int main()
-{
     SchnorrZKP zkp;
-    constexpr long long secret = 7;
+    const long long secret = 7;
     const std::string statement = "User is over 18";
 
-    // Full flow: secret -> public value -> proof -> verify.
     const long long publicValue = zkp.createPublicValue(secret);
     const ZKPProofData proof = zkp.generateProof(secret, statement);
-    check(zkp.verifyProof(proof, publicValue, statement),
-          "Valid proof verifies (secret -> publicValue -> proof -> verify)");
 
-    // Change the response, preserving its valid numeric range.
+    assert(zkp.verifyProof(proof, publicValue, statement) == true);
+
+    std::cout << "Valid proof: PASSED\n\n";
+}
+
+void testModifiedProof()
+{
+    std::cout << "Test 2: sua proof / statement -> INVALID\n";
+
+    SchnorrZKP zkp;
+    const long long secret = 7;
+    const std::string statement = "User is over 18";
+    const long long publicValue = zkp.createPublicValue(secret);
+    const ZKPProofData proof = zkp.generateProof(secret, statement);
+
     ZKPProofData changedProof = proof;
     changedProof.response = (changedProof.response + 1) % 11;
-    check(!zkp.verifyProof(changedProof, publicValue, statement),
-          "Modified proof is rejected");
+    assert(zkp.verifyProof(changedProof, publicValue, statement) == false);
 
-    // Pick a changed statement with a different challenge for this commitment.
-    // With the intentionally tiny demo group, challenge collisions are possible.
     const std::string candidates[] = {
-        "User is under 18", "User is over 21", "User is under 21",
-        "User passed identity check", "User did not pass identity check",
-        "Different statement A", "Different statement B", "Different statement C"
-    };
+        "User is under 18",
+        "User is over 21",
+        "Different statement A",
+        "Different statement B"};
     bool rejectedChangedStatement = false;
     for (const auto& changedStatement : candidates) {
-        if (changedStatement != statement &&
-            !zkp.verifyProof(proof, publicValue, changedStatement)) {
+        if (!zkp.verifyProof(proof, publicValue, changedStatement)) {
             rejectedChangedStatement = true;
             break;
         }
     }
-    check(rejectedChangedStatement, "Changed statement is rejected");
+    assert(rejectedChangedStatement == true);
 
-    // Use a different secret's public value (not merely an out-of-range value).
+    std::cout << "Modified proof: PASSED\n\n";
+}
+
+void testWrongPublicValue()
+{
+    std::cout << "Test 3: sai publicValue -> INVALID\n";
+
+    SchnorrZKP zkp;
+    const long long secret = 7;
+    const std::string statement = "User is over 18";
+    const long long publicValue = zkp.createPublicValue(secret);
+    const ZKPProofData proof = zkp.generateProof(secret, statement);
+
     const long long wrongPublicValue = zkp.createPublicValue(secret + 1);
-    check(wrongPublicValue != publicValue &&
-              !zkp.verifyProof(proof, wrongPublicValue, statement),
-          "Wrong public value is rejected");
+    assert(wrongPublicValue != publicValue);
+    assert(zkp.verifyProof(proof, wrongPublicValue, statement) == false);
 
-    if (failures != 0) {
-        std::cout << failures << " test(s) failed.\n";
-        return 1;
-    }
-    std::cout << "All SchnorrZKP tests passed.\n";
+    std::cout << "Wrong public value: PASSED\n\n";
+}
+
+int main()
+{
+    std::cout << "===== TEST ZKP MODULE =====\n\n";
+
+    testValidProof();
+    testModifiedProof();
+    testWrongPublicValue();
+
+    std::cout << "===== ALL ZKP TESTS PASSED =====\n";
     return 0;
 }
