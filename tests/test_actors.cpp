@@ -8,6 +8,12 @@
 #include "crypto/RSA.h"
 #include "identity/DID.h"
 
+#include "actors/Verifier.h"
+#include "zkp/SchnorrZKP.h"
+#include "identity/DIDDocument.h"
+#include "identity/DIDResolver.h"
+#include "identity/VerificationMethod.h"
+
 void testHolder()
 {
     // Main block: Holder receive / find / miss credential
@@ -76,14 +82,142 @@ void testIssuer()
     std::cout << "Issuer: PASSED\n\n";
 }
 
+
+void testVerifier()
+{
+    std::cout << "Test: Verifier\n";
+
+    DID issuerDID("did:example:issuer001");
+    RSA crypto;
+    crypto.generateKeyPair();
+
+    std::string keyId = "did:example:issuer001#key-1";
+    Issuer issuer(issuerDID, crypto, keyId);
+
+    DIDDocument document(issuerDID);
+    document.addVerificationMethod(VerificationMethod(
+        keyId, "RsaVerificationKey",
+        issuerDID.toString(), issuer.getPublicKey()
+    ));
+
+    DIDResolver resolver;
+    resolver.registerDocument(document);
+
+    Verifier verifier(DID("did:example:verifier001"));
+
+    DID subjectDID("did:example:subject001");
+    CredentialSubject subject(subjectDID);
+    subject.addClaim("name", "Alice");
+
+    VerifiableCredential vc = issuer.issueCredential(
+        "vc001", subject, "2026-10-19"
+    );
+
+    assert(verifier.verifyCredential(vc, resolver, crypto));
+    std::cout << "[PASS] Valid VC\n";
+
+    VerifiableCredential revokedVC = vc;
+    revokedVC.revoke();
+    assert(!verifier.verifyCredential(revokedVC, resolver, crypto));
+    std::cout << "[PASS] Revoked VC\n";
+
+    VerifiableCredential suspendedVC = vc;
+    suspendedVC.suspend();
+    assert(!verifier.verifyCredential(suspendedVC, resolver, crypto));
+    std::cout << "[PASS] Suspended VC\n";
+
+    VerifiableCredential unknownVC(
+        "vc002", "did:example:unknown001", subject, "2026-10-19"
+    );
+    unknownVC.setSignature(vc.getSignature());
+    assert(!verifier.verifyCredential(unknownVC, resolver, crypto));
+    std::cout << "[PASS] Unknown issuer DID\n";
+
+    Issuer wrongIssuer(
+        issuerDID, crypto, "did:example:issuer001#missing-key"
+    );
+    VerifiableCredential wrongKeyVC = wrongIssuer.issueCredential(
+        "vc003", subject, "2026-10-19"
+    );
+    assert(!verifier.verifyCredential(wrongKeyVC, resolver, crypto));
+    std::cout << "[PASS] Unknown keyId\n";
+
+    CredentialSubject changedSubject(subjectDID);
+    changedSubject.addClaim("name", "Bob");
+
+    VerifiableCredential changedVC(
+        vc.getId(), vc.getIssuerDID(), changedSubject,
+        vc.getIssuanceDate(), vc.getType()
+    );
+    changedVC.setSignature(vc.getSignature());
+    assert(!verifier.verifyCredential(changedVC, resolver, crypto));
+    std::cout << "[PASS] Modified VC\n";
+
+    DIDDocument wrongDocument(issuerDID);
+    wrongDocument.addVerificationMethod(VerificationMethod(
+        keyId, "RsaVerificationKey",
+        issuerDID.toString(), "WRONG_PUBLIC_KEY"
+    ));
+
+    DIDResolver wrongResolver;
+    wrongResolver.registerDocument(wrongDocument);
+
+    assert(!verifier.verifyCredential(vc, wrongResolver, crypto));
+    std::cout << "[PASS] Wrong public key\n";
+}
+
+
+void testVerifierZKP()
+{
+    std::cout << "Test 4: Verifier ZKP\n";
+
+    DID verifierDID("did:example:verifier001");
+    Verifier verifier(verifierDID);
+
+    SchnorrZKP zkp;
+
+    long long secret = 42;
+    std::string statement = "prove knowledge of secret";
+
+    long long publicValue = zkp.createPublicValue(secret);
+    ZKPProofData proof = zkp.generateProof(secret, statement);
+
+    // Test 1: Proof hop le -> true
+    assert(verifier.verifyZKProof(
+        proof, publicValue, statement, zkp
+    ));
+
+    std::cout << "Test 1: Valid ZKP proof PASSED\n";
+
+    // Test 2: Proof bi sua -> false
+    ZKPProofData invalidProof = proof;
+    ++invalidProof.response;
+
+    assert(!verifier.verifyZKProof(
+        invalidProof, publicValue, statement, zkp
+    ));
+
+    std::cout << "Test 2: Invalid ZKP proof PASSED\n";
+
+    // Test 3: Public value sai -> false
+    assert(!verifier.verifyZKProof(
+        proof, 0, statement, zkp
+    ));
+
+    std::cout << "Test 3: Wrong public value PASSED\n";
+
+    std::cout << "Verifier ZKP tests completed.\n\n";
+}
+
 int main()
 {
-    std::cout << "===== TEST ACTORS MODULE =====\n\n";
-
     testHolder();
     testIssuer();
+    testVerifier();
+    testVerifierZKP();
 
-    // Verifier tests: add after Verifier.cpp is implemented
-    std::cout << "===== ALL ACTORS TESTS PASSED =====\n";
+    std::cout << "All actor tests passed!\n";
     return 0;
 }
+
+
