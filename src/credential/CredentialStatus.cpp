@@ -1,6 +1,5 @@
 #include "credential/CredentialStatus.h"
 
-// TODO: Implement methods declared in CredentialStatus.h
 
 CredentialStatus::CredentialStatus() : state(CredentialState::VALID) {}
 

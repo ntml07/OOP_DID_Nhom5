@@ -1,7 +1,6 @@
 #include "credential/CredentialSubject.h"
 #include <sstream>
 
-// TODO: Implement methods declared in CredentialSubject.h
 
 CredentialSubject::CredentialSubject(const DID& did) : did(did) {}
 

@@ -6,7 +6,7 @@ private:
     std::string value;
 public:
     DID();
-    explicit DID(const std::string& value);
+    DID(const std::string& value);
     std::string getValue() const;
     bool isValid() const;
     std::string toString() const;

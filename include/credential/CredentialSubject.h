@@ -8,7 +8,7 @@ private:
     DID did;
     std::map<std::string, std::string> claims;
 public:
-    explicit CredentialSubject(const DID& did);
+    CredentialSubject(const DID& did);
     const DID& getDID() const;
     void addClaim(const std::string& key, const std::string& value);
     bool hasClaim(const std::string& key) const;

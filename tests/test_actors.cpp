@@ -1,27 +1,26 @@
 #include <iostream>
 #include <cassert>
+#include <string>
 
 #include "actors/Holder.h"
 #include "actors/Issuer.h"
+#include "actors/Verifier.h"
 #include "credential/CredentialSubject.h"
 #include "credential/VerifiableCredential.h"
 #include "crypto/RSA.h"
 #include "identity/DID.h"
-
-#include "actors/Verifier.h"
-#include "zkp/SchnorrZKP.h"
 #include "identity/DIDDocument.h"
 #include "identity/DIDResolver.h"
 #include "identity/VerificationMethod.h"
+#include "zkp/SchnorrZKP.h"
 
 void testHolder()
 {
-    // Main block: Holder receive / find / miss credential
     std::cout << "Test 1: Holder\n";
 
     DID holderDID("did:example:holder001");
     CredentialSubject subject(holderDID);
-    subject.addClaim("name", "Alice");
+    subject.addClaim("name", "Nguyen Van A");
 
     VerifiableCredential vc(
         "vc:001",
@@ -38,7 +37,7 @@ void testHolder()
     const VerifiableCredential* found = holder.findCredential("vc:001");
     assert(found != nullptr);
     assert(found->getId() == "vc:001");
-    assert(found->getSubject().getClaim("name") == "Alice");
+    assert(found->getSubject().getClaim("name") == "Nguyen Van A");
 
     const VerifiableCredential* notFound = holder.findCredential("vc:999");
     assert(notFound == nullptr);
@@ -48,14 +47,13 @@ void testHolder()
 
 void testIssuer()
 {
-    // Main block: Issuer issueCredential and attach signature
     std::cout << "Test 2: Issuer\n";
 
     DID issuerDID("did:example:issuer001");
     DID holderDID("did:example:holder001");
 
     CredentialSubject subject(holderDID);
-    subject.addClaim("name", "Alice");
+    subject.addClaim("name", "Nguyen Van A");
     subject.addClaim("membership", "active");
 
     RSA crypto;
@@ -74,7 +72,7 @@ void testIssuer()
     assert(issuer.getDID().getValue() == "did:example:issuer001");
     assert(vc.getId() == "vc:002");
     assert(vc.getIssuerDID() == issuerDID.toString());
-    assert(vc.getSubject().getClaim("name") == "Alice");
+    assert(vc.getSubject().getClaim("name") == "Nguyen Van A");
     assert(vc.hasSignature() == true);
     assert(vc.getSignature().getKeyId() == "did:example:issuer001#key-1");
     assert(vc.getStatus().isValid() == true);
@@ -82,10 +80,9 @@ void testIssuer()
     std::cout << "Issuer: PASSED\n\n";
 }
 
-
 void testVerifier()
 {
-    std::cout << "Test: Verifier\n";
+    std::cout << "Test 3: Verifier RSA\n";
 
     DID issuerDID("did:example:issuer001");
     RSA crypto;
@@ -97,8 +94,7 @@ void testVerifier()
     DIDDocument document(issuerDID);
     document.addVerificationMethod(VerificationMethod(
         keyId, "RsaVerificationKey",
-        issuerDID.toString(), issuer.getPublicKey()
-    ));
+        issuerDID.toString(), issuer.getPublicKey()));
 
     DIDResolver resolver;
     resolver.registerDocument(document);
@@ -107,73 +103,74 @@ void testVerifier()
 
     DID subjectDID("did:example:subject001");
     CredentialSubject subject(subjectDID);
-    subject.addClaim("name", "Alice");
+    subject.addClaim("name", "Nguyen Van A");
 
     VerifiableCredential vc = issuer.issueCredential(
-        "vc001", subject, "2026-10-19"
-    );
+        "vc001", subject, "2026-10-19");
 
-    assert(verifier.verifyCredential(vc, resolver, crypto));
+    assert(verifier.verifyCredential(vc, resolver, crypto, issuer));
     std::cout << "[PASS] Valid VC\n";
 
-    VerifiableCredential revokedVC = vc;
-    revokedVC.revoke();
-    assert(!verifier.verifyCredential(revokedVC, resolver, crypto));
-    std::cout << "[PASS] Revoked VC\n";
+    // Issuer revoke: Holder copy status may stay VALID; Verifier must reject
+    assert(issuer.revokeCredential(vc.getId()) == true);
+    assert(vc.getStatus().isValid() == true);
+    assert(!verifier.verifyCredential(vc, resolver, crypto, issuer));
+    std::cout << "[PASS] Issuer-revoked VC\n";
 
-    VerifiableCredential suspendedVC = vc;
+    assert(issuer.revokeCredential("vc-never-issued") == false);
+    assert(issuer.revokeCredential(vc.getId()) == false);
+    std::cout << "[PASS] Revoke unknown / already-revoked ID\n";
+
+    VerifiableCredential otherVc = issuer.issueCredential(
+        "vc001-other", subject, "2026-10-19");
+    assert(verifier.verifyCredential(otherVc, resolver, crypto, issuer));
+    std::cout << "[PASS] Other non-revoked VC\n";
+
+    VerifiableCredential suspendedVC = otherVc;
     suspendedVC.suspend();
-    assert(!verifier.verifyCredential(suspendedVC, resolver, crypto));
+    assert(!verifier.verifyCredential(suspendedVC, resolver, crypto, issuer));
     std::cout << "[PASS] Suspended VC\n";
 
     VerifiableCredential unknownVC(
-        "vc002", "did:example:unknown001", subject, "2026-10-19"
-    );
-    unknownVC.setSignature(vc.getSignature());
-    assert(!verifier.verifyCredential(unknownVC, resolver, crypto));
+        "vc002", "did:example:unknown001", subject, "2026-10-19");
+    unknownVC.setSignature(otherVc.getSignature());
+    assert(!verifier.verifyCredential(unknownVC, resolver, crypto, issuer));
     std::cout << "[PASS] Unknown issuer DID\n";
 
     Issuer wrongIssuer(
-        issuerDID, crypto, "did:example:issuer001#missing-key"
-    );
+        issuerDID, crypto, "did:example:issuer001#missing-key");
     VerifiableCredential wrongKeyVC = wrongIssuer.issueCredential(
-        "vc003", subject, "2026-10-19"
-    );
-    assert(!verifier.verifyCredential(wrongKeyVC, resolver, crypto));
+        "vc003", subject, "2026-10-19");
+    assert(!verifier.verifyCredential(wrongKeyVC, resolver, crypto, wrongIssuer));
     std::cout << "[PASS] Unknown keyId\n";
 
     CredentialSubject changedSubject(subjectDID);
-    changedSubject.addClaim("name", "Bob");
+    changedSubject.addClaim("name", "Nguyen Thi B");
 
     VerifiableCredential changedVC(
-        vc.getId(), vc.getIssuerDID(), changedSubject,
-        vc.getIssuanceDate(), vc.getType()
-    );
-    changedVC.setSignature(vc.getSignature());
-    assert(!verifier.verifyCredential(changedVC, resolver, crypto));
+        otherVc.getId(), otherVc.getIssuerDID(), changedSubject,
+        otherVc.getIssuanceDate(), otherVc.getType());
+    changedVC.setSignature(otherVc.getSignature());
+    assert(!verifier.verifyCredential(changedVC, resolver, crypto, issuer));
     std::cout << "[PASS] Modified VC\n";
 
     DIDDocument wrongDocument(issuerDID);
     wrongDocument.addVerificationMethod(VerificationMethod(
         keyId, "RsaVerificationKey",
-        issuerDID.toString(), "WRONG_PUBLIC_KEY"
-    ));
+        issuerDID.toString(), "WRONG_PUBLIC_KEY"));
 
     DIDResolver wrongResolver;
     wrongResolver.registerDocument(wrongDocument);
 
-    assert(!verifier.verifyCredential(vc, wrongResolver, crypto));
-    std::cout << "[PASS] Wrong public key\n";
+    assert(!verifier.verifyCredential(otherVc, wrongResolver, crypto, issuer));
+    std::cout << "[PASS] Wrong public key\n\n";
 }
-
 
 void testVerifierZKP()
 {
-    std::cout << "Test 4: Verifier ZKP\n";
+    std::cout << "Test 4: Verifier low-level ZKP\n";
 
-    DID verifierDID("did:example:verifier001");
-    Verifier verifier(verifierDID);
-
+    Verifier verifier(DID("did:example:verifier001"));
     SchnorrZKP zkp;
 
     long long secret = 42;
@@ -182,42 +179,121 @@ void testVerifierZKP()
     long long publicValue = zkp.createPublicValue(secret);
     ZKPProofData proof = zkp.generateProof(secret, statement);
 
-    // Test 1: Proof hop le -> true
-    assert(verifier.verifyZKProof(
-        proof, publicValue, statement, zkp
-    ));
+    assert(verifier.verifyZKProof(proof, publicValue, statement, zkp));
+    std::cout << "[PASS] Valid ZKP proof\n";
 
-    std::cout << "Test 1: Valid ZKP proof PASSED\n";
-
-    // Test 2: Proof bi sua -> false
     ZKPProofData invalidProof = proof;
     ++invalidProof.response;
+    assert(!verifier.verifyZKProof(invalidProof, publicValue, statement, zkp));
+    std::cout << "[PASS] Modified ZKP proof\n";
 
-    assert(!verifier.verifyZKProof(
-        invalidProof, publicValue, statement, zkp
-    ));
+    assert(!verifier.verifyZKProof(proof, 0, statement, zkp));
+    std::cout << "[PASS] Wrong public value\n\n";
+}
 
-    std::cout << "Test 2: Invalid ZKP proof PASSED\n";
+void testHolderDidControl()
+{
+    std::cout << "Test 5: Holder DID control (ZKP)\n";
 
-    // Test 3: Public value sai -> false
-    assert(!verifier.verifyZKProof(
-        proof, 0, statement, zkp
-    ));
+    RSA crypto;
+    crypto.generateKeyPair();
+    SchnorrZKP zkp;
 
-    std::cout << "Test 3: Wrong public value PASSED\n";
+    DID issuerDID("did:example:issuer001");
+    Issuer issuer(issuerDID, crypto, "did:example:issuer001#key-1");
 
-    std::cout << "Verifier ZKP tests completed.\n\n";
+    DIDResolver resolver;
+
+    DID holderDID("did:example:holder001");
+    Holder holder(holderDID);
+    holder.setSchnorrSecret(7);
+
+    DIDDocument holderDoc(holderDID);
+    holderDoc.addVerificationMethod(VerificationMethod(
+        holder.getSchnorrMethodId(),
+        "SchnorrVerificationKey",
+        holderDID.toString(),
+        std::to_string(holder.createSchnorrPublicValue(zkp))));
+    resolver.registerDocument(holderDoc);
+
+    CredentialSubject subject(holderDID);
+    subject.addClaim("degree", "Bachelor");
+    VerifiableCredential vc = issuer.issueCredential(
+        "vc:degree-1", subject, "2026-10-19");
+    holder.receiveCredential(vc);
+
+    Verifier verifier(DID("did:example:verifier001"));
+    const std::string session = "nonce-session-001";
+
+    ZKPProofData proof = holder.createOwnershipProof(zkp, session);
+    assert(verifier.verifyHolderControl(
+        vc, proof, holderDID.getValue(), session, resolver, zkp));
+    std::cout << "[PASS] Valid ownership proof\n";
+
+    ZKPProofData tampered = proof;
+    ++tampered.response;
+    assert(!verifier.verifyHolderControl(
+        vc, tampered, holderDID.getValue(), session, resolver, zkp));
+    std::cout << "[PASS] Modified proof\n";
+
+    DIDResolver emptyResolver;
+    assert(!verifier.verifyHolderControl(
+        vc, proof, holderDID.getValue(), session, emptyResolver, zkp));
+    std::cout << "[PASS] Holder DID not found\n";
+
+    DIDDocument noMethodDoc(holderDID);
+    DIDResolver noMethodResolver;
+    noMethodResolver.registerDocument(noMethodDoc);
+    assert(!verifier.verifyHolderControl(
+        vc, proof, holderDID.getValue(), session, noMethodResolver, zkp));
+    std::cout << "[PASS] Schnorr verification method missing\n";
+
+    DID otherDID("did:example:other001");
+    assert(!verifier.verifyHolderControl(
+        vc, proof, otherDID.getValue(), session, resolver, zkp));
+    std::cout << "[PASS] Subject / claimed DID mismatch\n";
+
+    DIDDocument badHolderDoc(holderDID);
+    badHolderDoc.addVerificationMethod(VerificationMethod(
+        holder.getSchnorrMethodId(),
+        "SchnorrVerificationKey",
+        holderDID.toString(),
+        "3"));
+    DIDResolver badResolver;
+    badResolver.registerDocument(badHolderDoc);
+    assert(!verifier.verifyHolderControl(
+        vc, proof, holderDID.getValue(), session, badResolver, zkp));
+    std::cout << "[PASS] Wrong public value\n";
+
+    bool wrongSessionRejected = false;
+    const std::string otherSessions[] = {
+        "nonce-session-002",
+        "nonce-session-003",
+        "other-challenge-xyz",
+        "completely-different-nonce"};
+    for (const auto& other : otherSessions)
+    {
+        if (!verifier.verifyHolderControl(
+                vc, proof, holderDID.getValue(), other, resolver, zkp))
+        {
+            wrongSessionRejected = true;
+            break;
+        }
+    }
+    assert(wrongSessionRejected);
+    std::cout << "[PASS] Wrong session challenge\n\n";
 }
 
 int main()
 {
+    std::cout << "===== TEST ACTORS MODULE =====\n\n";
+
     testHolder();
     testIssuer();
     testVerifier();
     testVerifierZKP();
+    testHolderDidControl();
 
-    std::cout << "All actor tests passed!\n";
+    std::cout << "===== ALL ACTORS TESTS PASSED =====\n";
     return 0;
 }
-
-

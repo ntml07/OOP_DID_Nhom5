@@ -2,8 +2,6 @@
 #include <iostream>
 #include <sstream>
 
-// TODO: Implement methods declared in VerifiableCredential.h
-
 VerifiableCredential::VerifiableCredential(
     const std::string& id,
     const std::string& issuerDID,

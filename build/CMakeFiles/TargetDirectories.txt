@@ -1,3 +1,0 @@
-/Users/minhlong/Long/code neu/oop neu/OOP_DID_Nhom 5/build/CMakeFiles/VerifiableCredential.dir
-/Users/minhlong/Long/code neu/oop neu/OOP_DID_Nhom 5/build/CMakeFiles/edit_cache.dir
-/Users/minhlong/Long/code neu/oop neu/OOP_DID_Nhom 5/build/CMakeFiles/rebuild_cache.dir

@@ -9,7 +9,7 @@ private:
     DID did;
     std::vector<VerificationMethod> verificationMethods;
 public:
-    explicit DIDDocument(const DID& did);
+    DIDDocument(const DID& did);
     const DID& getDID() const;
     void addVerificationMethod(const VerificationMethod& method);
     const std::vector<VerificationMethod>& getVerificationMethods() const;

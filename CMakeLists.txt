@@ -3,6 +3,7 @@ project(VerifiableCredential)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Main block: shared source groups for app + tests
 set(IDENTITY_SRC
     src/identity/DID.cpp
     src/identity/VerificationMethod.cpp
@@ -21,26 +22,35 @@ set(CRYPTO_SRC
     src/crypto/RSA.cpp
 )
 
-# Demo chương trình chính
+set(ACTORS_SRC
+    src/actors/Holder.cpp
+    src/actors/Issuer.cpp
+    src/actors/Verifier.cpp
+)
+
+set(ZKP_SRC
+    src/zkp/SchnorrZKP.cpp
+)
+
+# Main block: main demo executable
 add_executable(VerifiableCredential
     main.cpp
     ${IDENTITY_SRC}
     ${CREDENTIAL_SRC}
-    src/actors/Holder.cpp
-    src/actors/Issuer.cpp
-    src/actors/Verifier.cpp
+    ${ACTORS_SRC}
     ${CRYPTO_SRC}
-    src/zkp/SchnorrZKP.cpp
+    ${ZKP_SRC}
 )
 target_include_directories(VerifiableCredential PRIVATE include)
 
-# Từng file test_* có main() riêng nên mỗi cái một executable
+# Main block: identity module tests
 add_executable(test_identity
     tests/test_identity.cpp
     ${IDENTITY_SRC}
 )
 target_include_directories(test_identity PRIVATE include)
 
+# Main block: credential module tests
 add_executable(test_credential
     tests/test_credential.cpp
     src/identity/DID.cpp
@@ -49,24 +59,38 @@ add_executable(test_credential
 )
 target_include_directories(test_credential PRIVATE include)
 
+# Main block: crypto module tests
 add_executable(test_crypto
     tests/test_crypto.cpp
     ${CRYPTO_SRC}
 )
 target_include_directories(test_crypto PRIVATE include)
 
+# Main block: actors tests (Holder / Issuer / Verifier + ZKP)
 add_executable(test_actors
     tests/test_actors.cpp
-    src/identity/DID.cpp
+    ${IDENTITY_SRC}
     ${CREDENTIAL_SRC}
-    src/actors/Holder.cpp
-    src/actors/Issuer.cpp
+    ${ACTORS_SRC}
     ${CRYPTO_SRC}
+    ${ZKP_SRC}
 )
 target_include_directories(test_actors PRIVATE include)
 
+# Main block: ZKP module tests
 add_executable(test_zkp
     tests/test_zkp.cpp
-    src/zkp/SchnorrZKP.cpp
+    ${ZKP_SRC}
 )
 target_include_directories(test_zkp PRIVATE include)
+
+# Main block: end-to-end integration tests
+add_executable(test_integration
+    tests/test_integration.cpp
+    ${IDENTITY_SRC}
+    ${CREDENTIAL_SRC}
+    ${ACTORS_SRC}
+    ${CRYPTO_SRC}
+    ${ZKP_SRC}
+)
+target_include_directories(test_integration PRIVATE include)

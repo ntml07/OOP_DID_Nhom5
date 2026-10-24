@@ -13,11 +13,11 @@ void testSubjectAndStatus()
 
     DID holderDID("did:example:holder001");
     CredentialSubject subject(holderDID);
-    subject.addClaim("name", "Alice");
+    subject.addClaim("name", "Nguyen Van A");
     subject.addClaim("membership", "active");
 
     assert(subject.getDID().getValue() == "did:example:holder001");
-    assert(subject.getClaim("name") == "Alice");
+    assert(subject.getClaim("name") == "Nguyen Van A");
     assert(subject.hasClaim("membership") == true);
 
     CredentialStatus status;
@@ -42,7 +42,7 @@ void testVerifiableCredential()
 
     DID holderDID("did:example:holder001");
     CredentialSubject subject(holderDID);
-    subject.addClaim("name", "Alice");
+    subject.addClaim("name", "Nguyen Van A");
 
     VerifiableCredential vc(
         "vc:001",
@@ -52,7 +52,7 @@ void testVerifiableCredential()
 
     assert(vc.getId() == "vc:001");
     assert(vc.getIssuerDID() == "did:example:issuer001");
-    assert(vc.getSubject().getClaim("name") == "Alice");
+    assert(vc.getSubject().getClaim("name") == "Nguyen Van A");
     assert(vc.getStatus().isValid() == true);
     assert(vc.hasSignature() == false);
 
