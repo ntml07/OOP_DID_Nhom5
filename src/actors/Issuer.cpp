@@ -1,5 +1,7 @@
 #include "actors/Issuer.h"
 
+#include "identity/VerificationMethod.h"
+
 Issuer::Issuer(
     const DID& did,
     IAsymmetricCrypto& crypto,
@@ -19,6 +21,18 @@ const DID& Issuer::getDID() const
 std::string Issuer::getPublicKey() const
 {
     return crypto.getPublicKey();
+}
+
+DIDDocument Issuer::createDidDocument() const
+{
+    // Main block: gắn khóa công khai RSA vào DID Document của Issuer
+    DIDDocument document(did);
+    document.addVerificationMethod(VerificationMethod(
+        verificationMethodId,
+        "RsaVerificationKey",
+        did.toString(),
+        getPublicKey()));
+    return document;
 }
 
 VerifiableCredential Issuer::issueCredential(

@@ -9,14 +9,12 @@
 #include "credential/CredentialSubject.h"
 #include "crypto/RSA.h"
 #include "identity/DID.h"
-#include "identity/DIDDocument.h"
 #include "identity/DIDResolver.h"
-#include "identity/VerificationMethod.h"
 #include "zkp/SchnorrZKP.h"
 
-namespace {
-
-struct AppState {
+// Lớp ứng dụng giữ các đối tượng DID/VC và điều khiển menu.
+class VerifiableCredentialApp {
+private:
     bool identitiesReady = false;
     RSA rsa;
     SchnorrZKP zkp;
@@ -34,9 +32,29 @@ struct AppState {
     std::string sessionChallenge;
     ZKPProofData lastProof{};
     bool hasProof = false;
+
+    void printMenu() const;
+    bool requireIdentities() const;
+    bool requireWalletVc() const;
+    bool requirePresented() const;
+    bool requireProof() const;
+    std::string makeVcId(int index) const;
+
+    void initIdentities();
+    void issueCredential();
+    void showWallet() const;
+    void presentCredential();
+    void verifyCredential() const;
+    void createProof();
+    void verifyProof() const;
+    void revokeCredential();
+    void runDemo();
+
+public:
+    void run();
 };
 
-void printMenu()
+void VerifiableCredentialApp::printMenu() const
 {
     std::cout << "\nHE THONG DID & VC\n\n"
               << "1. Khoi tao danh tinh\n"
@@ -52,9 +70,9 @@ void printMenu()
               << "Nhap lua chon: ";
 }
 
-bool requireIdentities(const AppState& app)
+bool VerifiableCredentialApp::requireIdentities() const
 {
-    if (!app.identitiesReady)
+    if (!identitiesReady)
     {
         std::cout << "Can khoi tao danh tinh truoc (chon 1)\n";
         return false;
@@ -62,13 +80,13 @@ bool requireIdentities(const AppState& app)
     return true;
 }
 
-bool requireWalletVc(const AppState& app)
+bool VerifiableCredentialApp::requireWalletVc() const
 {
-    if (!requireIdentities(app))
+    if (!requireIdentities())
     {
         return false;
     }
-    if (app.holder->getCredentials().empty())
+    if (holder->getCredentials().empty())
     {
         std::cout << "Vi chua co VC. Hay cap VC truoc (chon 2)\n";
         return false;
@@ -76,9 +94,9 @@ bool requireWalletVc(const AppState& app)
     return true;
 }
 
-bool requirePresented(const AppState& app)
+bool VerifiableCredentialApp::requirePresented() const
 {
-    if (!app.hasPresented || app.presentedVc == nullptr)
+    if (!hasPresented || presentedVc == nullptr)
     {
         std::cout << "Chua xuat trinh VC (chon 4)\n";
         return false;
@@ -86,9 +104,9 @@ bool requirePresented(const AppState& app)
     return true;
 }
 
-bool requireProof(const AppState& app)
+bool VerifiableCredentialApp::requireProof() const
 {
-    if (!app.hasProof)
+    if (!hasProof)
     {
         std::cout << "Chua co ZKP. Hay tao proof truoc (chon 6)\n";
         return false;
@@ -96,7 +114,7 @@ bool requireProof(const AppState& app)
     return true;
 }
 
-std::string makeVcId(int index)
+std::string VerifiableCredentialApp::makeVcId(int index) const
 {
     std::ostringstream oss;
     oss << "vc-";
@@ -112,189 +130,166 @@ std::string makeVcId(int index)
     return oss.str();
 }
 
-void actionInit(AppState& app)
+void VerifiableCredentialApp::initIdentities()
 {
-    if (app.identitiesReady)
+    // Main block: tạo Actor, mỗi Actor tự dựng Document, App chỉ đăng ký
+    if (identitiesReady)
     {
         std::cout << "Danh tinh da duoc khoi tao. Khong tao lai\n";
         return;
     }
 
-    app.rsa.generateKeyPair();
+    rsa.generateKeyPair();
 
-    DID issuerDID("did:example:issuer001");
-    const std::string issuerKeyId = "did:example:issuer001#key-1";
-    app.issuer = std::make_unique<Issuer>(issuerDID, app.rsa, issuerKeyId);
+    issuer = std::make_unique<Issuer>(
+        DID("did:example:issuer001"),
+        rsa,
+        "did:example:issuer001#key-1");
+    resolver.registerDocument(issuer->createDidDocument());
 
-    DIDDocument issuerDoc(issuerDID);
-    issuerDoc.addVerificationMethod(VerificationMethod(
-        issuerKeyId,
-        "RsaVerificationKey",
-        issuerDID.toString(),
-        app.issuer->getPublicKey()));
-    app.resolver.registerDocument(issuerDoc);
+    holder = std::make_unique<Holder>(DID("did:example:holder001"));
+    holder->setSchnorrSecret(7);
+    resolver.registerDocument(holder->createDidDocument(zkp));
 
-    DID holderDID("did:example:holder001");
-    app.holder = std::make_unique<Holder>(holderDID);
-    app.holder->setSchnorrSecret(7);
-
-    const long long publicValue = app.holder->createSchnorrPublicValue(app.zkp);
-    DIDDocument holderDoc(holderDID);
-    holderDoc.addVerificationMethod(VerificationMethod(
-        app.holder->getSchnorrMethodId(),
-        "SchnorrVerificationKey",
-        holderDID.toString(),
-        std::to_string(publicValue)));
-    app.resolver.registerDocument(holderDoc);
-
-    app.verifier = std::make_unique<Verifier>(DID("did:example:verifier001"));
-    app.identitiesReady = true;
+    verifier = std::make_unique<Verifier>(DID("did:example:verifier001"));
+    identitiesReady = true;
 
     std::cout << "Khoi tao thanh cong.\n"
-              << "  Issuer DID : " << app.issuer->getDID().getValue() << "\n"
-              << "  Holder DID : " << app.holder->getDID().getValue() << "\n"
-              << "  Verifier DID: " << app.verifier->getDID().getValue() << "\n";
+              << "  Issuer DID : " << issuer->getDID().getValue() << "\n"
+              << "  Holder DID : " << holder->getDID().getValue() << "\n"
+              << "  Verifier DID: " << verifier->getDID().getValue() << "\n";
 }
 
-void actionIssue(AppState& app)
+void VerifiableCredentialApp::issueCredential()
 {
-    if (!requireIdentities(app))
+    // Main block: Issuer cấp/ký VC, Holder nhận vào ví
+    if (!requireIdentities())
     {
         return;
     }
 
-    const std::string vcId = makeVcId(app.nextVcIndex);
-    ++app.nextVcIndex;
+    const std::string vcId = makeVcId(nextVcIndex);
+    ++nextVcIndex;
 
-    CredentialSubject subject(app.holder->getDID());
+    CredentialSubject subject(holder->getDID());
     subject.addClaim("name", "Nguyen Van A");
     subject.addClaim("membership", "active");
 
-    VerifiableCredential vc = app.issuer->issueCredential(
+    VerifiableCredential vc = issuer->issueCredential(
         vcId,
         subject,
         "2026-10-17");
-    app.holder->receiveCredential(vc);
-    app.lastIssuedId = vcId;
+    holder->receiveCredential(vc);
+    lastIssuedId = vcId;
 
     std::cout << "Da cap VC va luu vao vi Holder\n"
               << "  VC ID: " << vcId << "\n"
               << "  Issuer: " << vc.getIssuerDID() << "\n";
 }
 
-void actionWallet(AppState& app)
+void VerifiableCredentialApp::showWallet() const
 {
-    if (!requireIdentities(app))
+    // Main block: nhờ Holder tự in ví
+    if (!requireIdentities())
     {
         return;
     }
-
-    const auto& wallet = app.holder->getCredentials();
-    if (wallet.empty())
-    {
-        std::cout << "Vi dang trong.\n";
-        return;
-    }
-
-    std::cout << "Vi chung chi (" << wallet.size() << "):\n";
-    for (size_t i = 0; i < wallet.size(); ++i)
-    {
-        const VerifiableCredential& vc = wallet[i];
-        std::cout << "  " << (i + 1) << ") ID=" << vc.getId()
-                  << " | issuer=" << vc.getIssuerDID()
-                  << " | subject=" << vc.getSubject().getDID().getValue()
-                  << " | status=" << vc.getStatus().toString();
-        if (vc.getSubject().hasClaim("name"))
-        {
-            std::cout << " | name=" << vc.getSubject().getClaim("name");
-        }
-        std::cout << "\n";
-    }
+    holder->showWallet();
 }
 
-void actionPresent(AppState& app)
+void VerifiableCredentialApp::presentCredential()
 {
-    if (!requireWalletVc(app))
+    // Main block: xuất trình đúng VC theo lastIssuedId, không tự chọn VC khác
+    if (!requireWalletVc())
     {
         return;
     }
 
-    const std::string& id = app.lastIssuedId;
-    const VerifiableCredential* found = app.holder->findCredential(id);
-    if (found == nullptr)
+    if (lastIssuedId.empty())
     {
-        const auto& wallet = app.holder->getCredentials();
-        found = &wallet.back();
+        std::cout << "Chua co VC de xuat trinh\n";
+        return;
     }
 
-    app.presentedVc = std::make_unique<VerifiableCredential>(*found);
-    app.hasPresented = true;
+    const VerifiableCredential* found = holder->findCredential(lastIssuedId);
+    if (found == nullptr)
+    {
+        std::cout << "Khong tim thay VC " << lastIssuedId << " trong vi\n";
+        return;
+    }
+
+    presentedVc = std::make_unique<VerifiableCredential>(*found);
+    hasPresented = true;
 
     std::cout << "Holder xuat trinh VC:\n";
-    app.presentedVc->display();
+    presentedVc->display();
     std::cout << "\n";
 }
 
-void actionVerifyVc(AppState& app)
+void VerifiableCredentialApp::verifyCredential() const
 {
-    if (!requireIdentities(app) || !requirePresented(app))
+    // Main block: Verifier xác minh VC qua Resolver + RSA
+    if (!requireIdentities() || !requirePresented())
     {
         return;
     }
 
-    const bool ok = app.verifier->verifyCredential(
-        *app.presentedVc,
-        app.resolver,
-        app.rsa,
-        *app.issuer);
+    const bool ok = verifier->verifyCredential(
+        *presentedVc,
+        resolver,
+        rsa,
+        *issuer);
 
     std::cout << "Xac minh VC (RSA): " << (ok ? "VALID" : "INVALID") << "\n";
 }
 
-void actionCreateZkp(AppState& app)
+void VerifiableCredentialApp::createProof()
 {
-    if (!requireIdentities(app) || !requireWalletVc(app))
+    // Main block: Holder tạo proof kiểm soát DID
+    if (!requireIdentities() || !requireWalletVc())
     {
         return;
     }
 
-    app.sessionChallenge = "session-" + makeVcId(app.nextVcIndex) + "-zkp";
-    app.lastProof = app.holder->createOwnershipProof(app.zkp, app.sessionChallenge);
-    app.hasProof = true;
+    sessionChallenge = "session-" + makeVcId(nextVcIndex) + "-zkp";
+    lastProof = holder->createOwnershipProof(zkp, sessionChallenge);
+    hasProof = true;
 
     std::cout << "Da tao ZKP (kiem soat DID Holder).\n"
-              << "  Challenge da luu: " << app.sessionChallenge << "\n";
+              << "  Challenge da luu: " << sessionChallenge << "\n";
 }
 
-void actionVerifyZkp(AppState& app)
+void VerifiableCredentialApp::verifyProof() const
 {
-    if (!requireIdentities(app) || !requirePresented(app) || !requireProof(app))
+    // Main block: Verifier kiểm proof DID-control
+    if (!requireIdentities() || !requirePresented() || !requireProof())
     {
         return;
     }
 
-    const bool ok = app.verifier->verifyHolderControl(
-        *app.presentedVc,
-        app.lastProof,
-        app.holder->getDID().getValue(),
-        app.sessionChallenge,
-        app.resolver,
-        app.zkp);
+    const bool ok = verifier->verifyHolderControl(
+        *presentedVc,
+        lastProof,
+        holder->getDID().getValue(),
+        sessionChallenge,
+        resolver,
+        zkp);
 
     std::cout << "Xac minh ZKP (DID control): " << (ok ? "VALID" : "INVALID") << "\n";
 }
 
-void actionRevoke(AppState& app)
+void VerifiableCredentialApp::revokeCredential()
 {
-    if (!requireIdentities(app))
+    // Main block: Issuer thu hồi theo ID, không sửa VC trong ví
+    if (!requireIdentities())
     {
         return;
     }
 
-    std::string id = app.lastIssuedId;
-    if (app.hasPresented && app.presentedVc != nullptr)
+    std::string id = lastIssuedId;
+    if (hasPresented && presentedVc != nullptr)
     {
-        id = app.presentedVc->getId();
+        id = presentedVc->getId();
     }
 
     if (id.empty())
@@ -303,8 +298,7 @@ void actionRevoke(AppState& app)
         return;
     }
 
-    // Main block: Issuer-side revoke by ID (does not mutate Holder wallet VC)
-    const bool ok = app.issuer->revokeCredential(id);
+    const bool ok = issuer->revokeCredential(id);
     if (!ok)
     {
         std::cout << "Thu hoi that bai: VC " << id
@@ -315,63 +309,62 @@ void actionRevoke(AppState& app)
     std::cout << "Issuer da thu hoi VC " << id << "\n";
 }
 
-void actionFullDemo(AppState& app)
+void VerifiableCredentialApp::runDemo()
 {
+    // Main block: chạy end-to-end tới thu hồi rồi verify lại
     std::cout << "\nDEMO DAY DU\n";
 
-    if (!app.identitiesReady)
+    if (!identitiesReady)
     {
         std::cout << "\nBuoc 1: Khoi tao danh tinh\n";
-        actionInit(app);
+        initIdentities();
     }
     else
     {
         std::cout << "\nBuoc 1: Bo qua (da khoi tao)\n";
     }
 
-    if (app.holder->getCredentials().empty())
+    if (holder->getCredentials().empty())
     {
         std::cout << "\nBuoc 2: Cap VC\n";
-        actionIssue(app);
+        issueCredential();
     }
     else
     {
         std::cout << "\nBuoc 2: Bo qua cap VC moi (vi da co VC)\n";
-        if (app.lastIssuedId.empty())
+        if (lastIssuedId.empty())
         {
-            app.lastIssuedId = app.holder->getCredentials().back().getId();
+            lastIssuedId = holder->getCredentials().back().getId();
         }
     }
 
     std::cout << "\nBuoc 3: Xem vi\n";
-    actionWallet(app);
+    showWallet();
 
     std::cout << "\nBuoc 4: Xuat trinh VC\n";
-    actionPresent(app);
+    presentCredential();
 
     std::cout << "\nBuoc 5: Xac minh VC\n";
-    actionVerifyVc(app);
+    verifyCredential();
 
     std::cout << "\nBuoc 6: Tao ZKP\n";
-    actionCreateZkp(app);
+    createProof();
 
     std::cout << "\nBuoc 7: Xac minh ZKP\n";
-    actionVerifyZkp(app);
+    verifyProof();
 
     std::cout << "\nBuoc 8: Issuer thu hoi VC\n";
-    actionRevoke(app);
+    revokeCredential();
 
     std::cout << "\nBuoc 5 lai: Xac minh VC sau thu hoi (ky vong INVALID)\n";
-    actionVerifyVc(app);
+    verifyCredential();
 
     std::cout << "\nDEMO END\n";
 }
 
-}
-
-int main()
+void VerifiableCredentialApp::run()
 {
-    AppState app;
+    // Main block: vòng lặp menu gọi method của ứng dụng
     std::cout << "He thong DID + Verifiable Credential\n";
 
     while (true)
@@ -390,45 +383,50 @@ int main()
         }
         if (choice == "1")
         {
-            actionInit(app);
+            initIdentities();
         }
         else if (choice == "2")
         {
-            actionIssue(app);
+            issueCredential();
         }
         else if (choice == "3")
         {
-            actionWallet(app);
+            showWallet();
         }
         else if (choice == "4")
         {
-            actionPresent(app);
+            presentCredential();
         }
         else if (choice == "5")
         {
-            actionVerifyVc(app);
+            verifyCredential();
         }
         else if (choice == "6")
         {
-            actionCreateZkp(app);
+            createProof();
         }
         else if (choice == "7")
         {
-            actionVerifyZkp(app);
+            verifyProof();
         }
         else if (choice == "8")
         {
-            actionRevoke(app);
+            revokeCredential();
         }
         else if (choice == "9")
         {
-            actionFullDemo(app);
+            runDemo();
         }
         else
         {
             std::cout << "Lua chon khong hop le\n";
         }
     }
+}
 
+int main()
+{
+    VerifiableCredentialApp app;
+    app.run();
     return 0;
 }

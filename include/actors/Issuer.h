@@ -3,6 +3,7 @@
 #include <string>
 #include "actors/IIssuer.h"
 #include "crypto/IAsymmetricCrypto.h"
+#include "identity/DIDDocument.h"
 
 class Issuer : public IIssuer {
 private:
@@ -18,4 +19,7 @@ public:
     VerifiableCredential issueCredential(const std::string& credentialId, const CredentialSubject& subject, const std::string& issuanceDate) override;
     bool revokeCredential(const std::string& credentialId) override;
     bool isRevoked(const std::string& credentialId) const override;
+
+    // Issuer tự dựng DID Document của mình (App chỉ đăng ký lên Resolver)
+    DIDDocument createDidDocument() const;
 };

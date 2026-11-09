@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include "actors/IHolder.h"
+#include "identity/DIDDocument.h"
 
 class Holder : public IHolder {
 private:
@@ -22,4 +23,8 @@ public:
     ZKPProofData createOwnershipProof(
         const IZKP& zkp,
         const std::string& sessionChallenge) const override;
+
+    // Holder tự hiển thị ví và dựng DID Document Schnorr
+    void showWallet() const;
+    DIDDocument createDidDocument(const IZKP& zkp) const;
 };

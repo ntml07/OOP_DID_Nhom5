@@ -1,5 +1,9 @@
 #include "actors/Holder.h"
 
+#include <iostream>
+
+#include "identity/VerificationMethod.h"
+
 namespace {
 
 constexpr long long kSchnorrQ = 11;
@@ -100,4 +104,42 @@ ZKPProofData Holder::createOwnershipProof(
         makeControlStatement(sessionChallenge, did.getValue());
 
     return zkp.generateProof(schnorrSecret, statement);
+}
+
+void Holder::showWallet() const
+{
+    // Main block: in các VC đang giữ trong ví
+    if (credentials.empty())
+    {
+        std::cout << "Vi dang trong.\n";
+        return;
+    }
+
+    std::cout << "Vi chung chi (" << credentials.size() << "):\n";
+    for (size_t i = 0; i < credentials.size(); ++i)
+    {
+        const VerifiableCredential& vc = credentials[i];
+        std::cout << "  " << (i + 1) << ") ID=" << vc.getId()
+                  << " | issuer=" << vc.getIssuerDID()
+                  << " | subject=" << vc.getSubject().getDID().getValue()
+                  << " | status=" << vc.getStatus().toString();
+        if (vc.getSubject().hasClaim("name"))
+        {
+            std::cout << " | name=" << vc.getSubject().getClaim("name");
+        }
+        std::cout << "\n";
+    }
+}
+
+DIDDocument Holder::createDidDocument(const IZKP& zkp) const
+{
+    // Main block: gắn public value Schnorr vào DID Document của Holder
+    DIDDocument document(did);
+    const long long publicValue = createSchnorrPublicValue(zkp);
+    document.addVerificationMethod(VerificationMethod(
+        getSchnorrMethodId(),
+        "SchnorrVerificationKey",
+        did.toString(),
+        std::to_string(publicValue)));
+    return document;
 }
